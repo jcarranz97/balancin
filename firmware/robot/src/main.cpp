@@ -84,7 +84,7 @@ void blink_task(__unused void *params) {
     pico_init_led();
     while (true) {
 #if configNUMBER_OF_CORES > 1
-        static int last_core_id = -1;
+        static uint8_t last_core_id = -1;
         if (portGET_CORE_ID() != last_core_id) {
             last_core_id = portGET_CORE_ID();
             printf("blink task is on core %d\n", last_core_id);
@@ -121,7 +121,7 @@ static void do_work(async_context_t *context, async_at_time_worker_t *worker) {
     static uint32_t count = 0;
     printf("Hello from worker count=%u\n", count++);
 #if configNUMBER_OF_CORES > 1
-        static int last_core_id = -1;
+        static uint8_t last_core_id = -1;
         if (portGET_CORE_ID() != last_core_id) {
             last_core_id = portGET_CORE_ID();
             printf("worker is on core %d\n", last_core_id);
@@ -142,7 +142,7 @@ void main_task(__unused void *params) {
     int count = 0;
     while(true) {
 #if configNUMBER_OF_CORES > 1
-        static int last_core_id = -1;
+        static uint8_t last_core_id = -1;
         if (portGET_CORE_ID() != last_core_id) {
             last_core_id = portGET_CORE_ID();
             printf("main task is on core %d\n", last_core_id);
