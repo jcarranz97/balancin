@@ -40,7 +40,7 @@ if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_executable(${TARGET_NAME}
-    src/main.c
+    src/main.cpp
     )
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include/
