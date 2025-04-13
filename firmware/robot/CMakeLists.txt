@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-set(TARGET_NAME main)
+set(TARGET_NAME robot)
 
 # Pull in SDK (must be before project)
 include(cmake/pico_sdk_import.cmake)
