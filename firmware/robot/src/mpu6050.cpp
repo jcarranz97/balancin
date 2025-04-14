@@ -12,7 +12,10 @@
 
 /* Example code to talk to a MPU6050 MEMS accelerometer and gyroscope
 
-   Data sheet: https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet1.pdf
+   Data sheet:
+    - https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet1.pdf
+    - https://cdn.sparkfun.com/datasheets/Sensors/Accelerometers/RM-MPU-6000A.pdf
+
    This is taking to simple approach of simply reading registers. It's perfectly
    possible to link up an interrupt line and set things up to read from the
    inbuilt FIFO to make it more useful.
