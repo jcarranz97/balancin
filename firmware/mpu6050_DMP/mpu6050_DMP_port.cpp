@@ -95,12 +95,12 @@ int main() {
     devStatus = mpu.dmpInitialize();
 
     /* --- if you have calibration data then set the sensor offsets here --- */
-    // mpu.setXAccelOffset();
-    // mpu.setYAccelOffset();
-    // mpu.setZAccelOffset();
-    // mpu.setXGyroOffset();
-    // mpu.setYGyroOffset();
-    // mpu.setZGyroOffset();
+    mpu.setXAccelOffset(-2723);
+    mpu.setYAccelOffset(-1519);
+    mpu.setZAccelOffset(1201);
+    mpu.setXGyroOffset(182);
+    mpu.setYGyroOffset(34);
+    mpu.setZGyroOffset(-103);
 
     /* --- alternatively you can try this (6 loops should be enough) --- */
     // mpu.CalibrateAccel(6);
