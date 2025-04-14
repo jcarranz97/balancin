@@ -12,7 +12,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "hardware/i2c.h"
-#include "mpu6050.h"
+#include "MPU6050.h"
 
 // Priorities of our threads - higher numbers are higher priority
 #define MAIN_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2UL )
@@ -22,24 +22,31 @@
 #define MAIN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define BLINK_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
+MPU6050 mpu;
+int16_t ax, ay, az; // Accelerometer data
+int16_t gx, gy, gz; // Gyroscope data
+
 void robot_task(__unused void *params) {
     printf("Robot Task is starting!!!\n");
-    // MPU6050
-    // This example will use I2C0 on the default SDA and SCL pins (4, 5 on a Pico)
-    mpu6050_init();
-    mpu6050_reset();
+    i2c_init(i2c_default, 400*1000);
 
-    int16_t acceleration[3], gyro[3], temp;
+    gpio_set_function(PICO_DEFAULT_I2C_SDA_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C);
+    gpio_pull_up(PICO_DEFAULT_I2C_SDA_PIN);
+    gpio_pull_up(PICO_DEFAULT_I2C_SCL_PIN);
+    printf("MPU6050 initializing...\n");
+    mpu.initialize();
+    printf("MPU6050 initialized\n");
+    if(mpu.testConnection()) printf("MPU6050 connection successful\n");
+    else {printf("MPU6050 connection failed\n");}
+
+    // int16_t acceleration[3], gyro[3], temp;
 
     while (true) {
         printf("Reading sensor data!\n");
-        // Read MPU6050 data
-        mpu6050_read_raw(acceleration, gyro, &temp);
-        printf("Acc. X = %d, Y = %d, Z = %d\n", acceleration[0], acceleration[1], acceleration[2]);
-        printf("Gyro. X = %d, Y = %d, Z = %d\n", gyro[0], gyro[1], gyro[2]);
-        // Temperature is simple so use the datasheet calculation to get deg C.
-        // Note this is chip temperature.
-        printf("Temp. = %f\n", (temp / 340.0) + 36.53);
+        mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+        printf("Acc. X = %d, Y = %d, Z = %d\n", ax, ay, az);
+        printf("Gyro. X = %d, Y = %d, Z = %d\n", gx, gy, gz);
         vTaskDelay(500);
     }
 }
