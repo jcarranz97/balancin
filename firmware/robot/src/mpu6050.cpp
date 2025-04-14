@@ -82,9 +82,9 @@ void mpu6050_reset() {
 
     // Clear sleep mode (0x6B register, 0x00 value)
     buf[1] = 0x00;  // Clear sleep mode by writing 0x00 to the 0x6B register
-    i2c_write_blocking(i2c_default, MPU6050_I2C_ADDR, buf, 2, false); 
+    i2c_write_blocking(i2c_default, MPU6050_I2C_ADDR, buf, 2, false);
     sleep_ms(10); // Allow stabilization after waking up
-    printf("-------- MPU6050 Reset Complete -------\n"); 
+    printf("-------- MPU6050 Reset Complete -------\n");
 }
 
 void mpu6050_read_raw(int16_t accel[3], int16_t gyro[3], int16_t *temp) {
