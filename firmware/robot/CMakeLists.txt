@@ -41,16 +41,24 @@ endif()
 
 add_executable(${TARGET_NAME}
     src/main.cpp
-    src/mpu6050.cpp
     )
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include/
     )
+
+add_subdirectory(lib)
+
+target_link_libraries(robot
+    PRIVATE
+    MPU6050  # This will pull I2Cdev as well
+)
+
 target_link_libraries(${TARGET_NAME} PRIVATE
     pico_async_context_freertos
     FreeRTOS-Kernel-Heap4
     pico_stdlib
     hardware_i2c
+    MPU6050
     )
 # Enable Serial over USB
 pico_enable_stdio_usb(${TARGET_NAME} 1)
