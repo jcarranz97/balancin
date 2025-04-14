@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-set(TARGET_NAME main)
+set(TARGET_NAME robot)
 
 # Pull in SDK (must be before project)
 include(cmake/pico_sdk_import.cmake)
@@ -40,7 +40,8 @@ if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_executable(${TARGET_NAME}
-    src/main.c
+    src/main.cpp
+    src/mpu6050.cpp
     )
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include/
