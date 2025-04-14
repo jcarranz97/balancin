@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.12)
-set(TARGET_NAME robot)
 
 # Pull in SDK (must be before project)
 include(cmake/pico_sdk_import.cmake)
@@ -11,8 +10,7 @@ if (NOT FREERTOS_KERNEL_PATH AND NOT DEFINED ENV{FREERTOS_KERNEL_PATH})
 endif()
 include(cmake/FreeRTOS_Kernel_import.cmake)
 
-# TODO: Put your project name here
-project(pico_freertos_project_template C CXX ASM)
+project(balancin C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
