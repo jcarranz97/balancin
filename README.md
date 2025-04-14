@@ -37,3 +37,8 @@ component1/
 ├── README.md                # Description of what this firmware does
 └── pico_sdk_import.cmake    # Only if building standalone; usually imported from root
 ```
+
+## Other Links
+
+https://wired.chillibasket.com/2015/01/calibrating-mpu6050/
+https://github.com/jrowberg/i2cdevlib/tree/master/RP2040/MPU6050
