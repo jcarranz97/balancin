@@ -41,6 +41,7 @@ endif()
 
 add_executable(${TARGET_NAME}
     src/main.cpp
+    src/mpu6050.cpp
     )
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include/

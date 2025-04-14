@@ -9,12 +9,9 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 
-#ifdef CYW43_WL_GPIO_LED_PIN
-#include "pico/cyw43_arch.h"
-#endif
-
 #include "FreeRTOS.h"
 #include "task.h"
+#include "mpu6050.h"
 
 // Which core to run on if configNUMBER_OF_CORES==1
 #ifndef RUN_FREE_RTOS_ON_CORE
@@ -60,22 +57,13 @@ static async_context_t *example_async_context(void) {
 #if USE_LED
 // Turn led on or off
 static void pico_set_led(bool led_on) {
-#if defined PICO_DEFAULT_LED_PIN
     gpio_put(PICO_DEFAULT_LED_PIN, led_on);
-#elif defined(CYW43_WL_GPIO_LED_PIN)
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
-#endif
 }
 
 // Initialise led
 static void pico_init_led(void) {
-#if defined PICO_DEFAULT_LED_PIN
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-#elif defined(CYW43_WL_GPIO_LED_PIN)
-    hard_assert(cyw43_arch_init() == PICO_OK);
-    pico_set_led(false); // make sure cyw43 is started
-#endif
 }
 
 void blink_task(__unused void *params) {
@@ -179,6 +167,7 @@ int main( void )
     rtos_name = "FreeRTOS";
 #endif
 
+    mpu6050_init();
 #if (configNUMBER_OF_CORES > 1)
     printf("Starting %s on both cores:\n", rtos_name);
     vLaunch();
