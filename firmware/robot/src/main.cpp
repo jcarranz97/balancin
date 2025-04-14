@@ -17,26 +17,10 @@
 // Priorities of our threads - higher numbers are higher priority
 #define MAIN_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2UL )
 #define BLINK_TASK_PRIORITY     ( tskIDLE_PRIORITY + 1UL )
-#define WORKER_TASK_PRIORITY    ( tskIDLE_PRIORITY + 4UL )
 
 // Stack sizes of our threads in words (4 bytes)
 #define MAIN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define BLINK_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
-#define WORKER_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
-
-#include "pico/async_context_freertos.h"
-static async_context_freertos_t async_context_instance;
-
-// Create an async context
-static async_context_t *example_async_context(void) {
-    async_context_freertos_config_t config = async_context_freertos_default_config();
-    config.task_priority = WORKER_TASK_PRIORITY; // defaults to ASYNC_CONTEXT_DEFAULT_FREERTOS_TASK_PRIORITY
-    config.task_stack_size = WORKER_TASK_STACK_SIZE; // defaults to ASYNC_CONTEXT_DEFAULT_FREERTOS_TASK_STACK_SIZE
-    if (!async_context_freertos_init(&async_context_instance, &config))
-        return NULL;
-    return &async_context_instance.core;
-}
-
 
 void robot_task(__unused void *params) {
     printf("Robot Task is starting!!!\n");
@@ -66,9 +50,6 @@ void robot_task(__unused void *params) {
 
 
 void main_task(__unused void *params) {
-    async_context_t *context = example_async_context();
-    // start the worker running
-    // async_context_add_at_time_worker_in_ms(context, &worker_timeout, 0);
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
@@ -77,7 +58,6 @@ void main_task(__unused void *params) {
         // printf("Hello from main task count=%u\n", count++);
         // vTaskDelay(1000);
     }
-    async_context_deinit(context);
 }
 
 void vLaunch( void) {
