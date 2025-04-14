@@ -50,6 +50,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     pico_async_context_freertos
     FreeRTOS-Kernel-Heap4
     pico_stdlib
+    hardware_i2c
     )
 # Enable Serial over USB
 pico_enable_stdio_usb(${TARGET_NAME} 1)

@@ -1,13 +1,15 @@
 #ifndef __MPU6050_H__
 #define __MPU6050_H__
 
-#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
+#include "pico/binary_info.h"
+#include "hardware/i2c.h"
 
-void mpu6050_init(void);
 
-uint8_t mpu6050_read_byte(uint8_t reg);
+void mpu6050_reset(void);
+void mpu6050_read_raw(int16_t accel[3], int16_t gyro[3], int16_t *temp);
 
 #endif  //__MPU6050_H__
 
