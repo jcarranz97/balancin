@@ -14,6 +14,7 @@
 #include "hardware/i2c.h"
 // #include "MPU6050.h"
 #include "MPU6050_6Axis_MotionApps_V6_12.h"
+#include "motors.h"
 
 // Priorities of our threads - higher numbers are higher priority
 #define MAIN_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2UL )
@@ -24,6 +25,15 @@
 #define BLINK_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 MPU6050 mpu;
+#define LEFT_MOTOR_PWM_PIN  12
+#define LEFT_MOTOR_PIN_A    14
+#define LEFT_MOTOR_PIN_B    15
+#define RIGHT_MOTOR_PWM_PIN 18
+#define RIGHT_MOTOR_PIN_A   22
+#define RIGHT_MOTOR_PIN_B   26
+dualMotorController motors(LEFT_MOTOR_PIN_A, LEFT_MOTOR_PIN_B, LEFT_MOTOR_PWM_PIN,
+                           RIGHT_MOTOR_PIN_A, RIGHT_MOTOR_PIN_B, RIGHT_MOTOR_PWM_PIN);
+
 
 bool dmpReady = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
@@ -116,11 +126,33 @@ void robot_task(__unused void *params) {
     }
 }
 
+void motor_task(__unused void *params) {
+    printf("Motor Task is starting!!!\n");
+    vTaskDelay(1000);
+    motors.init();
+    printf("Motors initialized\n");
+    vTaskDelay(2000);
+    while (true) {
+        // Move motor right motor speed from -1.0 to 1.0
+        for (int16_t speed = -1000; speed <= 1000; speed += 10) {
+            printf("Motor speed: %d\n", speed);
+            motors.setSpeed(speed, speed);
+            vTaskDelay(50);
+        }
+        // Move motor right motor speed from 1.0 to -1.0
+        for (int16_t speed = 1000; speed >= -1000; speed -= 10) {
+            printf("Motor speed: %d\n", speed);
+            motors.setSpeed(speed, speed);
+            vTaskDelay(50);
+        }
+    }
+}
 
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     // int count = 0;
     while(true) {
         // printf("Hello from main task count=%u\n", count++);

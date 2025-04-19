@@ -18,6 +18,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     pico_stdlib
     hardware_i2c
     MPU6050
+    motors
     )
 # Enable Serial over USB
 pico_enable_stdio_usb(${TARGET_NAME} 1)
