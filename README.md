@@ -42,3 +42,5 @@ component1/
 
 https://wired.chillibasket.com/2015/01/calibrating-mpu6050/
 https://github.com/jrowberg/i2cdevlib/tree/master/RP2040/MPU6050
+https://grabcad.com/library/self-balancing-robot-9
+https://handsontec.com/dataspecs/motor_fan/Dual%20Shaft%20Mini%20Gear%20Motor.pdf
