@@ -7,3 +7,5 @@ build-*
 .DS_Store
 *.pdf
 .venv
+*.FCBak
+*.gcode
