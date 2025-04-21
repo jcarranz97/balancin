@@ -53,6 +53,66 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 float yaw, pitch, roll;
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
                                         //
+
+// Declare variables
+// float Kp = 7;          // (P)roportional Tuning Parameter
+// float Ki = 6;          // (I)ntegral Tuning Parameter
+// float Kd = 3;          // (D)erivative Tuning Parameter
+float Kp = 40.56;          // (P)roportional Tuning Parameter
+float Ki = 0.01;          // (I)ntegral Tuning Parameter
+float Kd = 3;          // (D)erivative Tuning Parameter
+float iTerm = 0;       // Used to accumulate error (integral)
+float maxITerm = 1000; // The maximum value that can be output
+float lastTime = 0;    // Records the time the function was last called
+float maxPID = 1000;    // The maximum value that can be output
+float oldValue = 0;    // The last sensor value
+
+uint32_t millis() {
+    return xTaskGetTickCount() * portTICK_PERIOD_MS;
+}
+
+/**
+ * PID Controller
+ * @param  (target)  The target position/value we are aiming for
+ * @param  (current) The current value, as recorded by the sensor
+ * @return The output of the controller
+ */
+float pid(float target, float current) {
+	// Calculate the time since function was last called
+	float thisTime = millis();
+    printf("This time: %f\n", thisTime);
+	float dT = thisTime - lastTime;
+	lastTime = thisTime;
+    printf("Delta time: %f\n", dT);
+
+	// Calculate error between target and current values
+	float error = target - current;
+
+	// Calculate the integral term
+	iTerm += error * dT;
+    // Limit the integral term to the maximum value
+    if (iTerm > maxITerm) iTerm = maxITerm;
+    else if (iTerm < -maxITerm) iTerm = -maxITerm;
+
+
+	// Calculate the derivative term (using the simplification)
+	float dTerm = (oldValue - current) / dT;
+
+	// Set old variable to equal new ones
+	oldValue = current;
+
+	// Multiply each term by its constant, and add it all up
+	float result = (error * Kp) + (iTerm * Ki) + (dTerm * Kd);
+
+	// Limit PID value to maximum values
+	if (result > maxPID) result = maxPID;
+	else if (result < -maxPID) result = -maxPID;
+    printf("Result: %f\n", result);
+
+	return result;
+}
+
+
 void robot_task(__unused void *params) {
     printf("Robot Task is starting!!!\n");
     i2c_init(i2c_default, 400*1000);
@@ -74,12 +134,12 @@ void robot_task(__unused void *params) {
     printf("MPU6050 initialized\n");
 
     /* --- if you have calibration data then set the sensor offsets here --- */
-    mpu.setXAccelOffset(-2723);
-    mpu.setYAccelOffset(-1519);
-    mpu.setZAccelOffset(1201);
-    mpu.setXGyroOffset(182);
-    mpu.setYGyroOffset(34);
-    mpu.setZGyroOffset(-103);
+    mpu.setXAccelOffset(-2737);
+    mpu.setYAccelOffset(-1444);
+    mpu.setZAccelOffset(1205);
+    mpu.setXGyroOffset(174);
+    mpu.setYGyroOffset(32);
+    mpu.setZGyroOffset(-101);
 
     /* --- alternatively you can try this (6 loops should be enough) --- */
     // mpu.CalibrateAccel(6);
@@ -97,9 +157,14 @@ void robot_task(__unused void *params) {
         printf("DMP Initialization failed (code %d)", devStatus);
         vTaskDelay(2000);
     }
+    motors.init();
+    printf("Motors initialized\n");
+    vTaskDelay(2000);
     yaw = 0.0;
     pitch = 0.0;
     roll = 0.0;
+    float target = 0.0;
+    int16_t speed = 0;
 
     while (true) {
         if (!dmpReady);                                                    // if programming failed, don't try to do anything
@@ -121,8 +186,20 @@ void robot_task(__unused void *params) {
             yaw = ypr[0] * 180 / PI;
             pitch = ypr[1] * 180 / PI;
             roll = ypr[2] * 180 / PI;
-            printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
+            //printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
+            // Cast float to int16_t
+            speed = (int16_t)pid(target, roll);
+            printf("Speed: %d\n", speed);
+            // Add a deadband to the speed
+            if (speed > 0) {
+                speed = speed - 100;
+            } else if (speed < 0) {
+                speed = speed + 100;
+            }
+            motors.setSpeed(speed, speed);
+
         }
+        vTaskDelay(10);
     }
 }
 
@@ -152,7 +229,7 @@ void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     // int count = 0;
     while(true) {
         // printf("Hello from main task count=%u\n", count++);
