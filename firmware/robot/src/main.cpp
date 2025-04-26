@@ -10,8 +10,10 @@
 #include "pico/multicore.h"
 
 #include "FreeRTOS.h"
+#include "queue.h"
 #include "task.h"
 #include "hardware/i2c.h"
+#include "hardware/uart.h"
 // #include "MPU6050.h"
 #include "MPU6050_6Axis_MotionApps_V6_12.h"
 #include "motors.h"
@@ -23,6 +25,20 @@
 // Stack sizes of our threads in words (4 bytes)
 #define MAIN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define BLINK_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+
+// Buttons
+#define BUTTON_A 16
+#define LED1_PIN 25
+
+
+// UART Configuration
+#define UART_ID uart0
+#define BAUD_RATE 115200
+
+// We are using pins 0 and 1, but see the GPIO function select table in the
+// datasheet for information on which other pins can be used.
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
 
 MPU6050 mpu;
 #define LEFT_MOTOR_PWM_PIN  12
@@ -58,19 +74,70 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float Kp = 40.56;          // (P)roportional Tuning Parameter
-float Ki = 0.01;          // (I)ntegral Tuning Parameter
-float Kd = 3;          // (D)erivative Tuning Parameter
+float Kp = 80.0;          // (P)roportional Tuning Parameter
+float Ki = 0.0;          // (I)ntegral Tuning Parameter
+float Kd = 0.0;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxITerm = 1000; // The maximum value that can be output
 float lastTime = 0;    // Records the time the function was last called
 float maxPID = 1000;    // The maximum value that can be output
 float oldValue = 0;    // The last sensor value
+bool running = false; // Whether the PID controller is running or not
 
 uint32_t millis() {
     return xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
+QueueHandle_t button_event_queue;  // Queue handle
+
+
+void gpio_callback(uint gpio, uint32_t events) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (gpio == BUTTON_A) {
+        // Send an event to the queue (from ISR)
+        uint32_t event = events;
+        xQueueSendFromISR(button_event_queue, &event, &xHigherPriorityTaskWoken);
+    }
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+
+void button_task(void *pvParameters) {
+    uint32_t event;
+    absolute_time_t last_event_time = get_absolute_time();
+
+    while (1) {
+        if (xQueueReceive(button_event_queue, &event, portMAX_DELAY)) {
+            // Basic debounce: wait a little time after event
+            absolute_time_t now = get_absolute_time();
+            int64_t diff_ms = absolute_time_diff_us(last_event_time, now) / 1000;
+
+            if (diff_ms < 50) {
+                // Too soon = likely bounce, ignore
+                continue;
+            }
+            last_event_time = now;
+
+            // Confirm button state after bounce time
+            vTaskDelay(pdMS_TO_TICKS(10));  // Short delay to settle
+
+            bool pressed = (gpio_get(BUTTON_A) == 0);  // 0 = pressed
+
+            if (pressed) {
+                // printf("Button A pressed\n");
+                // motors.setSpeed(0, 0); or set your control flag
+                // Toggle the running state variable
+                running = !running;
+                gpio_put(LED1_PIN, running);  // Turn on LED if running
+            } else {
+                // printf("Button A released\n");
+                // motors.setSpeed(1000, 1000); or clear your control flag
+            }
+        }
+    }
+}
 /**
  * PID Controller
  * @param  (target)  The target position/value we are aiming for
@@ -80,7 +147,7 @@ uint32_t millis() {
 float pid(float target, float current) {
 	// Calculate the time since function was last called
 	float thisTime = millis();
-    printf("This time: %f\n", thisTime);
+    // printf("This time: %f\n", thisTime);
 	float dT = thisTime - lastTime;
 	lastTime = thisTime;
     printf("Delta time: %f\n", dT);
@@ -107,7 +174,7 @@ float pid(float target, float current) {
 	// Limit PID value to maximum values
 	if (result > maxPID) result = maxPID;
 	else if (result < -maxPID) result = -maxPID;
-    printf("Result: %f\n", result);
+    // printf("Result: %f\n", result);
 
 	return result;
 }
@@ -167,39 +234,49 @@ void robot_task(__unused void *params) {
     int16_t speed = 0;
 
     while (true) {
-        if (!dmpReady);                                                    // if programming failed, don't try to do anything
-        mpuInterrupt = true;
-        fifoCount = mpu.getFIFOCount();                                           // get current FIFO count
-        if ((mpuIntStatus & 0x10) || fifoCount == 1024)                           // check for overflow (this should never happen unless our code is too inefficient)
-        {
-            mpu.resetFIFO();                                                      // reset so we can continue cleanly
-            printf("FIFO overflow!");
-        }
-        else if (mpuIntStatus & 0x01)                                             // otherwise, check for DMP data ready interrupt (this should happen frequently)
-        {
-            while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();        // wait for correct available data length, should be a VERY short wait
-            mpu.getFIFOBytes(fifoBuffer, packetSize);                             // read a packet from FIFO
-            fifoCount -= packetSize;                                              // track FIFO count here in case there is > 1 packet available
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            yaw = ypr[0] * 180 / PI;
-            pitch = ypr[1] * 180 / PI;
-            roll = ypr[2] * 180 / PI;
-            //printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
-            // Cast float to int16_t
-            speed = (int16_t)pid(target, roll);
-            printf("Speed: %d\n", speed);
-            // Add a deadband to the speed
-            if (speed > 0) {
-                speed = speed - 100;
-            } else if (speed < 0) {
-                speed = speed + 100;
+        if (running) {
+            if (!dmpReady);                                                    // if programming failed, don't try to do anything
+            mpuInterrupt = true;
+            fifoCount = mpu.getFIFOCount();                                           // get current FIFO count
+            if ((mpuIntStatus & 0x10) || fifoCount == 1024)                           // check for overflow (this should never happen unless our code is too inefficient)
+            {
+                mpu.resetFIFO();                                                      // reset so we can continue cleanly
+                printf("FIFO overflow!");
             }
-            motors.setSpeed(speed, speed);
+            else if (mpuIntStatus & 0x01)                                             // otherwise, check for DMP data ready interrupt (this should happen frequently)
+            {
+                while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();        // wait for correct available data length, should be a VERY short wait
+                mpu.getFIFOBytes(fifoBuffer, packetSize);                             // read a packet from FIFO
+                fifoCount -= packetSize;                                              // track FIFO count here in case there is > 1 packet available
+                mpu.dmpGetQuaternion(&q, fifoBuffer);
+                mpu.dmpGetGravity(&gravity, &q);
+                mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+                yaw = ypr[0] * 180 / PI;
+                pitch = ypr[1] * 180 / PI;
+                roll = ypr[2] * 180 / PI;
+                //printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
+                // Cast float to int16_t
+                speed = (int16_t)pid(target, roll);
+                // printf("Speed: %d\n", speed);
+                // Add a deadband to the speed
+                if (speed > 0) {
+                    speed = speed - 100;
+                } else if (speed < 0) {
+                    speed = speed + 100;
+                }
+                motors.setSpeed(speed, speed);
 
+            }
         }
-        vTaskDelay(10);
+        else
+        {
+            // If not running, stop the motors
+            motors.setSpeed(0, 0);
+
+            // Reset the PID controller
+            iTerm = 0;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));  // Short delay to settle
     }
 }
 
@@ -225,12 +302,117 @@ void motor_task(__unused void *params) {
     }
 }
 
+
+void process_line(const char *line) {
+    // Check for "show" command
+    if (strcmp(line, "show") == 0) {
+        printf("\n--- Current PID values ---\n");
+        printf("Kp: %.4f\n", Kp);
+        printf("Ki: %.4f\n", Ki);
+        printf("Kd: %.4f\n", Kd);
+        printf("--------------------------\n");
+        return;
+    }
+
+    // Check for "reset" command
+    if (strcmp(line, "reset") == 0) {
+        Kp = 0.0f;
+        Ki = 0.0f;
+        Kd = 0.0f;
+        printf("PID values reset to zero.\n");
+        return;
+    }
+
+    // Otherwise, assume it's a "P:", "I:", or "D:" command
+    char param;
+    float value;
+
+    if (sscanf(line, "%c: %f", &param, &value) == 2) {
+        switch (param) {
+            case 'P':
+                Kp = value;
+                printf("Kp updated to %.4f\n", Kp);
+                break;
+            case 'I':
+                Ki = value;
+                printf("Ki updated to %.4f\n", Ki);
+                break;
+            case 'D':
+                Kd = value;
+                printf("Kd updated to %.4f\n", Kd);
+                break;
+            default:
+                printf("Unknown parameter: %c\n", param);
+                break;
+        }
+    } else {
+        printf("Invalid command format: %s\n", line);
+    }
+}
+
+void serial_scan(__unused void *params) {
+    // Scan serial inputs. When 0 turn of leds, when 1 turn on led
+    printf("Serial Scan Task is starting!!!\n");
+
+    // Set up our UART with the required speed.
+    uart_init(UART_ID, BAUD_RATE);
+
+    // Set the TX and RX pins by using the function select on the GPIO
+    // Set datasheet for more information on function select
+    gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_TX_PIN));
+    gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_RX_PIN));
+
+    // Use some the various UART functions to send out data
+    // In a default system, printf will also output via the default UART
+    vTaskDelay(1000);
+    char line[64];
+    int pos = 0;
+    while (true) {
+        // Only read when data is available
+        if (uart_is_readable(UART_ID)) {
+            char c = uart_getc(UART_ID);
+
+            // Echo the character back to the UART
+            printf("%c", c);
+
+            if (c == '\n' || c == '\r') {
+                line[pos] = '\0';
+                printf("Received: %s\n", line);
+                process_line(line);
+                pos = 0;
+            } else if (pos < sizeof(line) - 1) {
+                line[pos++] = c;
+            }
+        }
+        // printf("Hello, UART! %d\n", pos);
+        vTaskDelay(50);
+    }
+}
+
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    // xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // Initialize the LED pin
+    gpio_init(LED1_PIN);
+    gpio_set_dir(LED1_PIN, GPIO_OUT);
     // int count = 0;
+    // Initialize Button
+    gpio_init(BUTTON_A);
+    // Enable pull-up resistor, and watch for the button to be pressed
+    gpio_pull_up(BUTTON_A);
+    gpio_set_dir(BUTTON_A, GPIO_IN);
+    // Create queue for button events
+    button_event_queue = xQueueCreate(10, sizeof(uint32_t));
+
+    // Register the IRQ
+    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
+
+    // Create the button handling task
+    xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
+
     while(true) {
         // printf("Hello from main task count=%u\n", count++);
         // vTaskDelay(1000);
