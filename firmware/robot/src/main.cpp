@@ -131,6 +131,15 @@ void button_task(void *pvParameters) {
                 // Toggle the running state variable
                 running = !running;
                 gpio_put(LED1_PIN, running);  // Turn on LED if running
+                if (!running) {
+                    motors.setSpeed(0, 0);  // Stop motors if not running
+                    // Reset PID parameters
+                    iTerm = 0;
+                    // Last time is set to 0 to avoid large jumps
+                    lastTime = 0;
+                    oldValue = 0;
+                    printf("PID stopped\n");
+                }
             } else {
                 // printf("Button A released\n");
                 // motors.setSpeed(1000, 1000); or clear your control flag
@@ -150,7 +159,6 @@ float pid(float target, float current) {
     // printf("This time: %f\n", thisTime);
 	float dT = thisTime - lastTime;
 	lastTime = thisTime;
-    printf("Delta time: %f\n", dT);
 
 	// Calculate error between target and current values
 	float error = target - current;
@@ -255,26 +263,12 @@ void robot_task(__unused void *params) {
                 pitch = ypr[1] * 180 / PI;
                 roll = ypr[2] * 180 / PI;
                 //printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
+                printf("roll: %f\n", roll);
                 // Cast float to int16_t
                 speed = (int16_t)pid(target, roll);
-                // printf("Speed: %d\n", speed);
-                // Add a deadband to the speed
-                if (speed > 0) {
-                    speed = speed - 100;
-                } else if (speed < 0) {
-                    speed = speed + 100;
-                }
                 motors.setSpeed(speed, speed);
 
             }
-        }
-        else
-        {
-            // If not running, stop the motors
-            motors.setSpeed(0, 0);
-
-            // Reset the PID controller
-            iTerm = 0;
         }
         vTaskDelay(pdMS_TO_TICKS(10));  // Short delay to settle
     }
