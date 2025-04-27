@@ -19,14 +19,14 @@ time.sleep(2)  # Give time for Pico to reset
 
 # Range and Initial Values for PID
 initialKp = 424.16
-minKp = 400
+minKp = 200
 maxKp = 500
 
-initialKi = 10.00
+initialKi = 0.0
 minKi = 0
 maxKi = 15
 
-initialKd = 0.2
+initialKd = 0.0
 minKd = 0
 maxKd = 10
 
