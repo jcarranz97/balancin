@@ -97,7 +97,9 @@ float Kp = 462.92;          // (P)roportional Tuning Parameter
 float Ki = 0.0;          // (I)ntegral Tuning Parameter
 float Kd = 2628.0;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
+float maxPTerm = 1000; // The maximum value that can be output
 float maxITerm = 1000; // The maximum value that can be output
+float maxDTerm = 1000; // The maximum value that can be output
 float lastTime = 0;    // Records the time the function was last called
 float maxPID = 1000;    // The maximum value that can be output
 float oldValue = 0;    // The last sensor value
@@ -210,6 +212,16 @@ float pid(float target, float current) {
     float KpValue = (error * (Kp / 10.00));
     float KiValue = (iTerm * Ki / 100.00);
     float KdValue = (dTerm * Kd);
+
+    // Limit the PID values to maximum values
+    if (KpValue > maxPTerm) KpValue = maxPTerm;
+    else if (KpValue < -maxPTerm) KpValue = -maxPTerm;
+
+    if (KiValue > maxITerm) KiValue = maxITerm;
+    else if (KiValue < -maxITerm) KiValue = -maxITerm;
+
+    if (KdValue > maxDTerm) KdValue = maxDTerm;
+    else if (KdValue < -maxDTerm) KdValue = -maxDTerm;
 	// Multiply each term by its constant, and add it all up
     float result = KpValue + KiValue + KdValue;
 
