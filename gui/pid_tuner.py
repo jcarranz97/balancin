@@ -1,10 +1,13 @@
 import sys
+import os
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QDial, QTextEdit
 )
 from PySide6.QtCore import Qt, QTimer
 import serial
 import time
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # Serial setup
 SERIAL_PORT = '/dev/ttyACM0'  # Adjust if needed
@@ -15,17 +18,17 @@ time.sleep(2)  # Give time for Pico to reset
 
 
 # Range and Initial Values for PID
-initialKp = 462.92
-minKp = 380
+initialKp = 424.16
+minKp = 400
 maxKp = 500
 
-initialKi = 0.00
+initialKi = 10.00
 minKi = 0
-maxKi = 1000
+maxKi = 15
 
-initialKd = 2628.00
-minKd = 1500
-maxKd = 3500
+initialKd = 0.2
+minKd = 0
+maxKd = 10
 
 def range_map(value, from_min, from_max, to_min, to_max):
     """Range map function to convert a value from one range to another."""
@@ -46,11 +49,6 @@ class PIDDashboard(QWidget):
         self.kp_value = 0.0
         self.ki_value = 0.0
         self.kd_value = 0.0
-
-        # --- Last Sent Values ---
-        self.last_kp = None
-        self.last_ki = None
-        self.last_kd = None
 
         # --- KP Dial ---
         kp_layout = QVBoxLayout()
@@ -100,6 +98,13 @@ class PIDDashboard(QWidget):
         self.start_button.toggled.connect(self.toggle_controller)
         layout.addWidget(self.start_button)
 
+        # --- Dump PID Values Button ---
+        self.pid_dump = []
+        self.dumping_pid_values = False
+        self.dump_pid_button = QPushButton("Dump PID Values")
+        self.dump_pid_button.clicked.connect(self.dump_pid)
+        layout.addWidget(self.dump_pid_button)
+
         # --- LED Indicator ---
         self.led_label = QLabel()
         self.update_led(False)
@@ -135,17 +140,9 @@ class PIDDashboard(QWidget):
 
     def update_pid(self):
         # Compare with last sent values
-        if self.kp_value != self.last_kp:
-            self.send_serial(f"P: {self.kp_value:.2f}")
-            self.last_kp = self.kp_value
-
-        if self.ki_value != self.last_ki:
-            self.send_serial(f"I: {self.ki_value:.2f}")
-            self.last_ki = self.ki_value
-
-        if self.kd_value != self.last_kd:
-            self.send_serial(f"D: {self.kd_value:.2f}")
-            self.last_kd = self.kd_value
+        self.send_serial(f"P: {self.kp_value:.2f}")
+        self.send_serial(f"I: {self.ki_value:.2f}")
+        self.send_serial(f"D: {self.kd_value:.2f}")
 
     def toggle_controller(self, checked):
         if checked:
@@ -157,30 +154,87 @@ class PIDDashboard(QWidget):
             self.update_led(False)
             self.send_serial("stop")
 
+    def dump_pid(self):
+        """Dump PID values to the serial output, capture and create .csv file."""
+        # Clear the previous dump
+        self.pid_dump = []
+        self.send_serial("d")
+        # Here you would implement the logic to capture the output and save it to a .csv file
+        # For now, we will just print a message
+        print("Dumping PID values...")
+        self.dumping_pid_values = True
+
     def update_led(self, running):
         if running:
             self.led_label.setStyleSheet("background-color: green; border-radius: 25px; min-width: 50px; min-height: 50px;")
         else:
             self.led_label.setStyleSheet("background-color: red; border-radius: 25px; min-width: 50px; min-height: 50px;")
 
-    # def check_serial(self):
-    #     if ser.in_waiting > 0:
-    #         try:
-    #             line = ser.readline().decode('utf-8').strip()
-    #             if line:
-    #                 print(f"Received: {line}")
-    #                 self.serial_output.append(line)
-    #         except UnicodeDecodeError:
-    #             pass
     def check_serial(self):
         while ser.in_waiting > 0:
             try:
                 line = ser.readline().decode('utf-8').strip()
                 if line:
-                    print(f"Received: {line}")
-                    self.serial_output.append(line)
+                    # Check if we are dumping PID values
+                    if self.dumping_pid_values:
+                        # The dump is complete when we receive "Total"
+                        if line.startswith("Total"):
+                            self.dumping_pid_values = False
+                            print("Dump complete.")
+                            print("Generating CSV file...")
+                            self.generate_csv()
+                            self.plot_pid_dump()
+                        else:
+                            print(f"PID Dump: '{line}'")
+                            self.pid_dump.append(line)
+                    else:
+                        print(f"Received: {line}")
+                        self.serial_output.append(line)
             except UnicodeDecodeError:
                 pass
+
+    def generate_csv(self):
+        """Generate a CSV file from the dumped PID values."""
+        if self.pid_dump:
+            # If the file already exists, overwrite it
+            if os.path.exists("pid_dump.csv"):
+                print("File already exists. Deleting...")
+                os.remove("pid_dump.csv")
+                print("File deleted.")
+            # Write the PID dump to a CSV file
+            with open("pid_dump.csv", "w") as f:
+                for line in self.pid_dump:
+                    f.write(line + "\n")
+            print("PID values dumped to pid_dump.csv")
+        else:
+            print("No PID values to dump.")
+
+    def plot_pid_dump(self):
+        """Plot the PID dump values using matplotlib."""
+        df = pd.read_csv('pid_dump.csv', skiprows=5, sep=',')
+        # Create two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 8))
+
+        # First subplot: target and current
+        ax1.plot(df['timestamp'], df['target'], label='Target', color='blue')
+        ax1.plot(df['timestamp'], df['current'], label='Current', color='orange')
+        ax1.set_ylabel('Angle (°)')
+        ax1.set_title('Target vs Current')
+        ax1.set_ylim([-45, 45])  # <<< Force y-axis range here
+        ax1.legend()
+        ax1.grid(True)
+
+        # Second subplot: output
+        ax2.plot(df['timestamp'], df['output'], label='PID Output', color='green')
+        ax2.set_xlabel('Timestamp')
+        ax2.set_ylabel('Output')
+        ax2.set_title('PID Output')
+        ax2.legend()
+        ax2.grid(True)
+
+        # Adjust layout
+        plt.tight_layout()
+        plt.show()
 
 app = QApplication(sys.argv)
 

@@ -51,6 +51,25 @@ dualMotorController motors(LEFT_MOTOR_PIN_A, LEFT_MOTOR_PIN_B, LEFT_MOTOR_PWM_PI
                            RIGHT_MOTOR_PIN_A, RIGHT_MOTOR_PIN_B, RIGHT_MOTOR_PWM_PIN);
 
 
+#define MAX_SAMPLES 1000  // How many samples to store (adjust if needed)
+
+typedef struct {
+    float timestamp;
+    float target;
+    float current;
+    float error;
+    float dT;
+    float iTerm;
+    float dTerm;
+    float KpValue;
+    float KiValue;
+    float KdValue;
+    float output;
+} PIDLog;
+
+PIDLog pidLogs[MAX_SAMPLES];
+volatile int pidLogIndex = 0;
+
 bool dmpReady = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
 uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
@@ -104,6 +123,11 @@ void gpio_callback(uint gpio, uint32_t events) {
 }
 
 
+void clear_pid_logs() {
+    pidLogIndex = 0;
+}
+
+
 void button_task(void *pvParameters) {
     uint32_t event;
     absolute_time_t last_event_time = get_absolute_time();
@@ -129,9 +153,8 @@ void button_task(void *pvParameters) {
                 // printf("Button A pressed\n");
                 // motors.setSpeed(0, 0); or set your control flag
                 // Toggle the running state variable
-                running = !running;
-                gpio_put(LED1_PIN, running);  // Turn on LED if running
-                if (!running) {
+                // If controller is running, stop it
+                if (running) {
                     motors.setSpeed(0, 0);  // Stop motors if not running
                     // Reset PID parameters
                     iTerm = 0;
@@ -140,6 +163,18 @@ void button_task(void *pvParameters) {
                     oldValue = 0;
                     printf("PID stopped\n");
                 }
+                // If controller is not running, start it
+                else {
+                    printf("PID started\n");
+                    iTerm = 0;
+                    // Last time is set to current time to avoid large jumps
+                    // in the Integral term
+                    lastTime = millis();
+                    clear_pid_logs();
+                }
+                // Toggle the running state
+                running = !running;
+                gpio_put(LED1_PIN, running);  // Turn on LED if running
             } else {
                 // printf("Button A released\n");
                 // motors.setSpeed(1000, 1000); or clear your control flag
@@ -165,10 +200,6 @@ float pid(float target, float current) {
 
 	// Calculate the integral term
 	iTerm += error * dT;
-    // Limit the integral term to the maximum value
-    if (iTerm > maxITerm) iTerm = maxITerm;
-    else if (iTerm < -maxITerm) iTerm = -maxITerm;
-
 
 	// Calculate the derivative term (using the simplification)
 	float dTerm = (oldValue - current) / dT;
@@ -176,15 +207,58 @@ float pid(float target, float current) {
 	// Set old variable to equal new ones
 	oldValue = current;
 
+    float KpValue = (error * (Kp / 10.00));
+    float KiValue = (iTerm * Ki / 100.00);
+    float KdValue = (dTerm * Kd);
 	// Multiply each term by its constant, and add it all up
-	float result = (error * (Kp / 10.00)) + (iTerm * Ki / 100.00 ) + (dTerm * Kd);
+    float result = KpValue + KiValue + KdValue;
 
 	// Limit PID value to maximum values
 	if (result > maxPID) result = maxPID;
 	else if (result < -maxPID) result = -maxPID;
     // printf("Result: %f\n", result);
+    // === LOG DATA HERE ===
+    if (pidLogIndex < MAX_SAMPLES) {
+        pidLogs[pidLogIndex].timestamp = thisTime;
+        pidLogs[pidLogIndex].target = target;
+        pidLogs[pidLogIndex].current = current;
+        pidLogs[pidLogIndex].error = error;
+        pidLogs[pidLogIndex].dT = dT;
+        pidLogs[pidLogIndex].iTerm = iTerm;
+        pidLogs[pidLogIndex].dTerm = dTerm;
+        pidLogs[pidLogIndex].KpValue = KpValue;
+        pidLogs[pidLogIndex].KiValue = KiValue;
+        pidLogs[pidLogIndex].KdValue = KdValue;
+        pidLogs[pidLogIndex].output = result;
+        pidLogIndex++;
+    }
 
 	return result;
+}
+
+
+void dump_pid_logs() {
+    // Print PID tunning values
+    printf("Kp: %.4f\n", Kp);
+    printf("Ki: %.4f\n", Ki);
+    printf("Kd: %.4f\n", Kd);
+    printf("timestamp,target,current,error,dT,iTerm,dTerm,KpValue,KiValue,KdValue,output\n");
+    for (int i = 0; i < pidLogIndex; i++) {
+        printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+            pidLogs[i].timestamp,
+            pidLogs[i].target,
+            pidLogs[i].current,
+            pidLogs[i].error,
+            pidLogs[i].dT,
+            pidLogs[i].iTerm,
+            pidLogs[i].dTerm,
+            pidLogs[i].KpValue,
+            pidLogs[i].KiValue,
+            pidLogs[i].KdValue,
+            pidLogs[i].output
+        );
+    }
+    printf("Total logs: %d\n", pidLogIndex);
 }
 
 
@@ -315,6 +389,21 @@ void process_line(const char *line) {
         Ki = 0.0f;
         Kd = 0.0f;
         printf("PID values reset to zero.\n");
+        return;
+    }
+
+    // Check for "dump" command
+    if (strcmp(line, "d") == 0) {
+        // 500 ms delay
+        vTaskDelay(pdMS_TO_TICKS(500));
+        dump_pid_logs();
+        return;
+    }
+
+    // Check for "clear" command
+    if (strcmp(line, "c") == 0) {
+        clear_pid_logs();
+        printf("PID logs cleared.\n");
         return;
     }
 
