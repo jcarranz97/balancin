@@ -74,7 +74,7 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float Kp = 80.0;          // (P)roportional Tuning Parameter
+float Kp = 750.0;          // (P)roportional Tuning Parameter
 float Ki = 0.0;          // (I)ntegral Tuning Parameter
 float Kd = 0.0;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
@@ -177,7 +177,7 @@ float pid(float target, float current) {
 	oldValue = current;
 
 	// Multiply each term by its constant, and add it all up
-	float result = (error * Kp) + (iTerm * Ki) + (dTerm * Kd);
+	float result = (error * (Kp / 10.00)) + (iTerm * Ki) + (dTerm * Kd);
 
 	// Limit PID value to maximum values
 	if (result > maxPID) result = maxPID;
@@ -267,8 +267,9 @@ void robot_task(__unused void *params) {
                 // Cast float to int16_t
                 speed = (int16_t)pid(target, roll);
                 motors.setSpeed(speed, speed);
-
             }
+        } else {
+            motors.setSpeed(0, 0);  // Stop motors if not running
         }
         vTaskDelay(pdMS_TO_TICKS(10));  // Short delay to settle
     }
@@ -299,7 +300,7 @@ void motor_task(__unused void *params) {
 
 void process_line(const char *line) {
     // Check for "show" command
-    if (strcmp(line, "show") == 0) {
+    if (strcmp(line, "s") == 0) {
         printf("\n--- Current PID values ---\n");
         printf("Kp: %.4f\n", Kp);
         printf("Ki: %.4f\n", Ki);
@@ -309,7 +310,7 @@ void process_line(const char *line) {
     }
 
     // Check for "reset" command
-    if (strcmp(line, "reset") == 0) {
+    if (strcmp(line, "r") == 0) {
         Kp = 0.0f;
         Ki = 0.0f;
         Kd = 0.0f;
