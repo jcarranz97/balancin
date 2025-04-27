@@ -213,7 +213,7 @@ class PIDDashboard(QWidget):
         """Plot the PID dump values using matplotlib."""
         df = pd.read_csv('pid_dump.csv', skiprows=5, sep=',')
         # Create two subplots
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 8))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(12, 8))
 
         # First subplot: target and current
         ax1.plot(df['timestamp'], df['target'], label='Target', color='blue')
@@ -225,12 +225,23 @@ class PIDDashboard(QWidget):
         ax1.grid(True)
 
         # Second subplot: output
-        ax2.plot(df['timestamp'], df['output'], label='PID Output', color='green')
+        ax2.plot(df['timestamp'], df['KpValue'], label='KpValue', color='green')
+        ax2.plot(df['timestamp'], df['KiValue'], label='KiValue', color='blue')
+        ax2.plot(df['timestamp'], df['KdValue'], label='KdValue', color='orange')
         ax2.set_xlabel('Timestamp')
-        ax2.set_ylabel('Output')
-        ax2.set_title('PID Output')
+        ax2.set_ylabel('Value')
+        ax2.set_title('PID Values')
         ax2.legend()
         ax2.grid(True)
+
+        # Second subplot: output
+        ax3.plot(df['timestamp'], df['output'], label='PID Output', color='green')
+        ax3.set_xlabel('Timestamp')
+        ax3.set_ylabel('Output')
+        ax3.set_title('PID Output (Motor Throttle)')
+        ax3.set_ylim([-1000, 1000])  # <<< Force y-axis range here
+        ax3.legend()
+        ax3.grid(True)
 
         # Adjust layout
         plt.tight_layout()
