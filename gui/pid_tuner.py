@@ -34,9 +34,9 @@ class PIDDashboard(QWidget):
 
         # --- KP Dial ---
         kp_layout = QVBoxLayout()
-        self.kp_label = QLabel("Kp: 550.00")
+        self.kp_label = QLabel("Kp: 350.00")
         self.kp_dial = QDial()
-        self.kp_dial.setRange(550, 650)
+        self.kp_dial.setRange(350, 650)
         self.kp_dial.setNotchesVisible(True)
         self.kp_dial.valueChanged.connect(self.kp_changed)
         kp_layout.addWidget(self.kp_label)
