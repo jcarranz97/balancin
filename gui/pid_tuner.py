@@ -13,6 +13,26 @@ BAUD_RATE = 115200
 ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
 time.sleep(2)  # Give time for Pico to reset
 
+
+# Range and Initial Values for PID
+initialKp = 462.92
+minKp = 380
+maxKp = 500
+
+initialKi = 0.00
+minKi = 0
+maxKi = 1000
+
+initialKd = 2628.00
+minKd = 1500
+maxKd = 3500
+
+def range_map(value, from_min, from_max, to_min, to_max):
+    """Range map function to convert a value from one range to another."""
+    # Map value from one range to another
+    return (value - from_min) * (to_max - to_min) / (from_max - from_min) + to_min
+
+
 class PIDDashboard(QWidget):
     def __init__(self):
         super().__init__()
@@ -34,9 +54,9 @@ class PIDDashboard(QWidget):
 
         # --- KP Dial ---
         kp_layout = QVBoxLayout()
-        self.kp_label = QLabel("Kp: 350.00")
+        self.kp_label = QLabel(f"Kp: {initialKp:.2f}")
         self.kp_dial = QDial()
-        self.kp_dial.setRange(350, 650)
+        self.kp_dial.setRange(0, 1000)
         self.kp_dial.setNotchesVisible(True)
         self.kp_dial.valueChanged.connect(self.kp_changed)
         kp_layout.addWidget(self.kp_label)
@@ -44,7 +64,7 @@ class PIDDashboard(QWidget):
 
         # --- KI Dial ---
         ki_layout = QVBoxLayout()
-        self.ki_label = QLabel("Ki: 0.00")
+        self.ki_label = QLabel(f"Ki: {initialKi:.2f}")
         self.ki_dial = QDial()
         self.ki_dial.setRange(0, 1000)
         self.ki_dial.setNotchesVisible(True)
@@ -54,7 +74,7 @@ class PIDDashboard(QWidget):
 
         # --- KD Dial ---
         kd_layout = QVBoxLayout()
-        self.kd_label = QLabel("Kd: 0.00")
+        self.kd_label = QLabel(f"Kd: {initialKd:.2f}")
         self.kd_dial = QDial()
         self.kd_dial.setRange(0, 1000)
         self.kd_dial.setNotchesVisible(True)
@@ -102,15 +122,15 @@ class PIDDashboard(QWidget):
         ser.write((command + '\n').encode('utf-8'))
 
     def kp_changed(self, value):
-        self.kp_value = value
+        self.kp_value = range_map(value, 0, 1000, minKp, maxKp)
         self.kp_label.setText(f"Kp: {self.kp_value:.2f}")
 
     def ki_changed(self, value):
-        self.ki_value = value / 10.0
+        self.ki_value = range_map(value, 0, 1000, minKi, maxKi)
         self.ki_label.setText(f"Ki: {self.ki_value:.2f}")
 
     def kd_changed(self, value):
-        self.kd_value = value / 10.0
+        self.kd_value = range_map(value, 0, 1000, minKd, maxKd)
         self.kd_label.setText(f"Kd: {self.kd_value:.2f}")
 
     def update_pid(self):

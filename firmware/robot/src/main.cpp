@@ -74,9 +74,9 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float Kp = 750.0;          // (P)roportional Tuning Parameter
+float Kp = 462.92;          // (P)roportional Tuning Parameter
 float Ki = 0.0;          // (I)ntegral Tuning Parameter
-float Kd = 0.0;          // (D)erivative Tuning Parameter
+float Kd = 2628.0;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxITerm = 1000; // The maximum value that can be output
 float lastTime = 0;    // Records the time the function was last called
@@ -177,7 +177,7 @@ float pid(float target, float current) {
 	oldValue = current;
 
 	// Multiply each term by its constant, and add it all up
-	float result = (error * (Kp / 10.00)) + (iTerm * Ki) + (dTerm * Kd);
+	float result = (error * (Kp / 10.00)) + (iTerm * Ki / 100.00 ) + (dTerm * Kd);
 
 	// Limit PID value to maximum values
 	if (result > maxPID) result = maxPID;
