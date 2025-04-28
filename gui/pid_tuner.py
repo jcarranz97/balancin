@@ -18,9 +18,9 @@ time.sleep(2)  # Give time for Pico to reset
 
 
 # Range and Initial Values for PID
-initialKp = 424.16
-minKp = 200
-maxKp = 500
+initialKp = 1400.00
+minKp = 1000
+maxKp = 2000
 
 initialKi = 0.0
 minKi = 0
@@ -49,6 +49,7 @@ class PIDDashboard(QWidget):
         self.kp_value = 0.0
         self.ki_value = 0.0
         self.kd_value = 0.0
+        self.target_angle = -1.0
 
         # --- KP Dial ---
         kp_layout = QVBoxLayout()
@@ -86,6 +87,17 @@ class PIDDashboard(QWidget):
         dials_row.addLayout(ki_layout)
         dials_row.addLayout(kd_layout)
         layout.addLayout(dials_row)
+
+        # --- Target Dial ---
+        target_angle_layout = QVBoxLayout()
+        self.target_angle_label = QLabel("Target Angle: 0.0°")
+        self.target_angle_dial = QDial()
+        self.target_angle_dial.setRange(-45, 45)
+        self.target_angle_dial.setNotchesVisible(True)
+        self.target_angle_dial.valueChanged.connect(self.target_angle_changed)
+        target_angle_layout.addWidget(self.target_angle_label)
+        target_angle_layout.addWidget(self.target_angle_dial)
+        layout.addLayout(target_angle_layout)
 
         # --- Update Button ---
         self.update_button = QPushButton("Update PID Values")
@@ -138,11 +150,16 @@ class PIDDashboard(QWidget):
         self.kd_value = range_map(value, 0, 1000, minKd, maxKd)
         self.kd_label.setText(f"Kd: {self.kd_value:.2f}")
 
+    def target_angle_changed(self, value):
+        self.target_angle = value
+        self.target_angle_label.setText(f"Target Angle: {self.target_angle:.2f}°")
+
     def update_pid(self):
         # Compare with last sent values
         self.send_serial(f"P: {self.kp_value:.2f}")
         self.send_serial(f"I: {self.ki_value:.2f}")
         self.send_serial(f"D: {self.kd_value:.2f}")
+        self.send_serial(f"S: {self.target_angle:.2f}")
 
     def toggle_controller(self, checked):
         if checked:
