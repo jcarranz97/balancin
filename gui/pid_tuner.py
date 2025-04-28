@@ -159,7 +159,6 @@ class PIDDashboard(QWidget):
         self.send_serial(f"P: {self.kp_value:.2f}")
         self.send_serial(f"I: {self.ki_value:.2f}")
         self.send_serial(f"D: {self.kd_value:.2f}")
-        self.send_serial(f"S: {self.target_angle:.2f}")
 
     def toggle_controller(self, checked):
         if checked:
@@ -237,7 +236,7 @@ class PIDDashboard(QWidget):
         ax1.plot(df['timestamp'], df['current'], label='Current', color='orange')
         ax1.set_ylabel('Angle (°)')
         ax1.set_title('Target vs Current')
-        ax1.set_ylim([-45, 45])  # <<< Force y-axis range here
+        # ax1.set_ylim([-45, 45])  # <<< Force y-axis range here
         ax1.legend()
         ax1.grid(True)
 
