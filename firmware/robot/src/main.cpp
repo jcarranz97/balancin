@@ -93,9 +93,10 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float Kp = 462.92;          // (P)roportional Tuning Parameter
+float target = -1.0;
+float Kp = 1406.00;          // (P)roportional Tuning Parameter
 float Ki = 0.0;          // (I)ntegral Tuning Parameter
-float Kd = 2628.0;          // (D)erivative Tuning Parameter
+float Kd = 0.0;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxPTerm = 1000; // The maximum value that can be output
 float maxITerm = 1000; // The maximum value that can be output
@@ -324,7 +325,6 @@ void robot_task(__unused void *params) {
     yaw = 0.0;
     pitch = 0.0;
     roll = 0.0;
-    float target = 0.0;
     int16_t speed = 0;
 
     while (true) {
@@ -349,7 +349,7 @@ void robot_task(__unused void *params) {
                 pitch = ypr[1] * 180 / PI;
                 roll = ypr[2] * 180 / PI;
                 //printf("ypr: %f,\t %f,\t %f\n", yaw, pitch, roll);
-                printf("roll: %f\n", roll);
+                // printf("roll: %f\n", roll);
                 // Cast float to int16_t
                 speed = (int16_t)pid(target, roll);
                 motors.setSpeed(speed, speed);
@@ -357,7 +357,7 @@ void robot_task(__unused void *params) {
         } else {
             motors.setSpeed(0, 0);  // Stop motors if not running
         }
-        vTaskDelay(pdMS_TO_TICKS(10));  // Short delay to settle
+        vTaskDelay(pdMS_TO_TICKS(2));  // Short delay to settle
     }
 }
 
@@ -425,6 +425,10 @@ void process_line(const char *line) {
 
     if (sscanf(line, "%c: %f", &param, &value) == 2) {
         switch (param) {
+            case 'S': // Set target
+                target = value;
+                printf("Target updated to %.4f\n", target);
+                break;
             case 'P':
                 Kp = value;
                 printf("Kp updated to %.4f\n", Kp);
