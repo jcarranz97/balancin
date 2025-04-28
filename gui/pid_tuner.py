@@ -24,11 +24,11 @@ maxKp = 2000
 
 initialKi = 0.0
 minKi = 0
-maxKi = 15
+maxKi = 50
 
 initialKd = 0.0
 minKd = 0
-maxKd = 10
+maxKd = 1000
 
 def range_map(value, from_min, from_max, to_min, to_max):
     """Range map function to convert a value from one range to another."""
@@ -236,7 +236,7 @@ class PIDDashboard(QWidget):
         ax1.plot(df['timestamp'], df['current'], label='Current', color='orange')
         ax1.set_ylabel('Angle (°)')
         ax1.set_title('Target vs Current')
-        # ax1.set_ylim([-45, 45])  # <<< Force y-axis range here
+        ax1.set_ylim([-20, 20])  # <<< Force y-axis range here
         ax1.legend()
         ax1.grid(True)
 
