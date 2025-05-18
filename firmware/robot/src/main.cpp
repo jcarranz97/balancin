@@ -93,10 +93,10 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float target = -3.0;
-float Kp = 1315.00;          // (P)roportional Tuning Parameter
-float Ki = 7.50;          // (I)ntegral Tuning Parameter
-float Kd = 93.00;          // (D)erivative Tuning Parameter
+float target = 2.0;
+float Kp = 1056.00;          // (P)roportional Tuning Parameter
+float Ki = 0.00;          // (I)ntegral Tuning Parameter
+float Kd = 46.00;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxPTerm = 1000; // The maximum value that can be output
 float maxITerm = 1000; // The maximum value that can be output
@@ -270,6 +270,8 @@ void dump_pid_logs() {
             pidLogs[i].KdValue,
             pidLogs[i].output
         );
+        // Add a small delay to avoid flooding the console
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     printf("Total logs: %d\n", pidLogIndex);
 }
@@ -425,7 +427,7 @@ void process_line(const char *line) {
 
     if (sscanf(line, "%c: %f", &param, &value) == 2) {
         switch (param) {
-            case 'S': // Set target
+            case 'T': // Set target
                 target = value;
                 printf("Target updated to %.4f\n", target);
                 break;
