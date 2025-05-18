@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Serial setup
-SERIAL_PORT = '/dev/ttyACM0'  # Adjust if needed
+SERIAL_PORT = '/dev/ttyUSB0'  # Adjust if needed
 BAUD_RATE = 115200
 
 ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
@@ -18,12 +18,12 @@ time.sleep(2)  # Give time for Pico to reset
 
 
 # Range and Initial Values for PID
-initialKp = 1400.00
-minKp = 1000
+initialKp = 8000.00
+minKp = 0000
 maxKp = 2000
 
 initialKi = 0.0
-minKi = 0
+minKi = -50
 maxKi = 50
 
 initialKd = 0.0
@@ -157,8 +157,15 @@ class PIDDashboard(QWidget):
     def update_pid(self):
         # Compare with last sent values
         self.send_serial(f"P: {self.kp_value:.2f}")
+        time.sleep(1)
         self.send_serial(f"I: {self.ki_value:.2f}")
+        time.sleep(1)
         self.send_serial(f"D: {self.kd_value:.2f}")
+        time.sleep(1)
+        # Update the target angle by sending 'S'
+        # The target should be sent as integer
+        self.send_serial(f"T: {int(self.target_angle)}")
+        time.sleep(1)
 
     def toggle_controller(self, checked):
         if checked:
@@ -247,6 +254,7 @@ class PIDDashboard(QWidget):
         ax2.set_xlabel('Timestamp')
         ax2.set_ylabel('Value')
         ax2.set_title('PID Values')
+        ax2.set_ylim([-1000, 1000])  # <<< Force y-axis range here
         ax2.legend()
         ax2.grid(True)
 
