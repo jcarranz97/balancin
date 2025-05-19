@@ -54,8 +54,11 @@ dualMotorController motors(LEFT_MOTOR_PIN_A, LEFT_MOTOR_PIN_B, LEFT_MOTOR_PWM_PI
 // Stepper motor pins
 #define LEFT_MOTOR_STEP_PIN   14
 #define LEFT_MOTOR_DIR_PIN    15
+#define LEFT_MOTOR_ENABLE_PIN  10
 #define RIGHT_MOTOR_STEP_PIN  12
 #define RIGHT_MOTOR_DIR_PIN   13
+#define RIGHT_MOTOR_ENABLE_PIN 11
+int16_t speed_rpm = 0;
 
 #define MAX_SAMPLES 1000  // How many samples to store (adjust if needed)
 
@@ -100,9 +103,9 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
 float target = 2.0;
-float Kp = 1056.00;          // (P)roportional Tuning Parameter
+float Kp = 395.00;          // (P)roportional Tuning Parameter
 float Ki = 0.00;          // (I)ntegral Tuning Parameter
-float Kd = 46.00;          // (D)erivative Tuning Parameter
+float Kd = 8.00;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxPTerm = 1000; // The maximum value that can be output
 float maxITerm = 1000; // The maximum value that can be output
@@ -115,6 +118,12 @@ bool running = false; // Whether the PID controller is running or not
 uint32_t millis() {
     return xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
+
+
+int16_t abs16(int16_t x) {
+    return x < 0 ? -x : x;
+}
+
 
 QueueHandle_t button_event_queue;  // Queue handle
 
@@ -164,7 +173,6 @@ void button_task(void *pvParameters) {
                 // Toggle the running state variable
                 // If controller is running, stop it
                 if (running) {
-                    motors.setSpeed(0, 0);  // Stop motors if not running
                     // Reset PID parameters
                     iTerm = 0;
                     // Last time is set to 0 to avoid large jumps
@@ -327,13 +335,13 @@ void robot_task(__unused void *params) {
         printf("DMP Initialization failed (code %d)", devStatus);
         vTaskDelay(2000);
     }
-    motors.init();
     printf("Motors initialized\n");
     vTaskDelay(2000);
     yaw = 0.0;
     pitch = 0.0;
     roll = 0.0;
     int16_t speed = 0;
+    int16_t max_rpm_speed = 500;
 
     while (true) {
         if (running) {
@@ -360,10 +368,15 @@ void robot_task(__unused void *params) {
                 // printf("roll: %f\n", roll);
                 // Cast float to int16_t
                 speed = (int16_t)pid(target, roll);
-                motors.setSpeed(speed, speed);
+                // Limit speed to a maximum value
+                if (speed > max_rpm_speed) speed = max_rpm_speed;
+                else if (speed < -max_rpm_speed) speed = -max_rpm_speed;
+
+                // Update motor speed
+                speed_rpm = speed;
             }
         } else {
-            motors.setSpeed(0, 0);  // Stop motors if not running
+            speed_rpm = 0;  // Stop motors if not running
         }
         vTaskDelay(pdMS_TO_TICKS(2));  // Short delay to settle
     }
@@ -504,30 +517,7 @@ unsigned long get_step_delay_us(double target_rpm, int steps_per_rev) {
     return (unsigned long)(60000000.0 / (target_rpm * steps_per_rev));
 }
 
-void main_task(__unused void *params) {
-    // start the led blinking
-    // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    // xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    //xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    // Initialize the LED pin
-    gpio_init(LED1_PIN);
-    gpio_set_dir(LED1_PIN, GPIO_OUT);
-    // int count = 0;
-    // Initialize Button
-    gpio_init(BUTTON_A);
-    // Enable pull-up resistor, and watch for the button to be pressed
-    gpio_pull_up(BUTTON_A);
-    gpio_set_dir(BUTTON_A, GPIO_IN);
-    // Create queue for button events
-    // button_event_queue = xQueueCreate(10, sizeof(uint32_t));
-
-    // Register the IRQ
-    //gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
-
-    // Create the button handling task
-    //xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
-
+void stepper_motor_task(__unused void *params) {
     // Set Stepper motor pins
     gpio_init(LEFT_MOTOR_STEP_PIN);
     gpio_set_dir(LEFT_MOTOR_STEP_PIN, GPIO_OUT);
@@ -537,9 +527,11 @@ void main_task(__unused void *params) {
     gpio_set_dir(RIGHT_MOTOR_STEP_PIN, GPIO_OUT);
     gpio_init(RIGHT_MOTOR_DIR_PIN);
     gpio_set_dir(RIGHT_MOTOR_DIR_PIN, GPIO_OUT);
-
-    // Set the direction of the stepper motor to clockwise
-    gpio_put(LEFT_MOTOR_DIR_PIN, 1);
+    // Configure the enable pins as outputs
+    gpio_init(LEFT_MOTOR_ENABLE_PIN);
+    gpio_set_dir(LEFT_MOTOR_ENABLE_PIN, GPIO_OUT);
+    gpio_init(RIGHT_MOTOR_ENABLE_PIN);
+    gpio_set_dir(RIGHT_MOTOR_ENABLE_PIN, GPIO_OUT);
 
     // NUMBER_OF_STEPS * DIVIDER_FOR_FULL_ROTATION
     //    MS1   MS2   MS3     Microstep Resolution
@@ -549,44 +541,67 @@ void main_task(__unused void *params) {
     //    1     1     0       Eighth Step
     //    1     1     1       Sixteenth Step
     int number_of_steps = 200 * 16; // Number of steps to take
-    int speed_rpm = 60; // Speed in RPM
-    while(true) {
-        // printf("Hello from main task count=%u\n", count++);
-        // vTaskDelay(1000);
+    bool pin_state = false; // Pin state
+
+    while (true) {
+        // If speed is beetween -10 and 10, stop the motor
+        if (abs16(speed_rpm) < 10) {
+            gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
+            gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
+        } else {
+            // Enable the motor
+            gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
+            gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
+        }
+        // Set the direction of the motor according to the speed_rpm
+        if (speed_rpm < 0) {
+            gpio_put(LEFT_MOTOR_DIR_PIN, 1);
+            gpio_put(RIGHT_MOTOR_DIR_PIN, 1);
+        } else {
+            gpio_put(LEFT_MOTOR_DIR_PIN, 0);
+            gpio_put(RIGHT_MOTOR_DIR_PIN, 0);
+        }
         // Move the stepper motor one step
-        // One turn is 200 steps, so 1/200 = 0.005 turns
-        gpio_put(LEFT_MOTOR_DIR_PIN, 1);
-        gpio_put(RIGHT_MOTOR_DIR_PIN, 1);
-        for (int i = 0; i < number_of_steps; i++) {
-            // Set the step pin high, then low
-            // This will cause the motor to take one step
-            // printf("Step %d\n", i);
-            gpio_put(LEFT_MOTOR_STEP_PIN, 1);
-            gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
-            gpio_put(LEFT_MOTOR_STEP_PIN, 0);
-            gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
-        }
-        // Wait for 1 second
-        vTaskDelay(1000);
-        // Move the stepper motor one step in the opposite direction
-        // Set the direction of the stepper motor to counter-clockwise
-        gpio_put(LEFT_MOTOR_DIR_PIN, 0);
-        gpio_put(RIGHT_MOTOR_DIR_PIN, 0);
-        for (int i = 0; i < number_of_steps; i++) {
-            // Set the step pin high, then low
-            // This will cause the motor to take one step
-            // printf("Step %d\n", i);
-            gpio_put(LEFT_MOTOR_STEP_PIN, 1);
-            gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
-            gpio_put(LEFT_MOTOR_STEP_PIN, 0);
-            gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
-        }
-        // Wait for 1 second
-        vTaskDelay(1000);
+        gpio_put(LEFT_MOTOR_STEP_PIN, pin_state);
+        gpio_put(RIGHT_MOTOR_STEP_PIN, pin_state);
+        sleep_us(get_step_delay_us(abs16(speed_rpm), number_of_steps));
+        pin_state = !pin_state;
+    }
+}
+
+
+void main_task(__unused void *params) {
+    // start the led blinking
+    // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // Initialize the LED pin
+    xTaskCreate(stepper_motor_task, "StepperMotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    gpio_init(LED1_PIN);
+    gpio_set_dir(LED1_PIN, GPIO_OUT);
+    // int count = 0;
+    // Initialize Button
+    gpio_init(BUTTON_A);
+    // Enable pull-up resistor, and watch for the button to be pressed
+    gpio_pull_up(BUTTON_A);
+    gpio_set_dir(BUTTON_A, GPIO_IN);
+    // Create queue for button events
+    button_event_queue = xQueueCreate(10, sizeof(uint32_t));
+
+    // Register the IRQ
+    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
+
+    // Create the button handling task
+    xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
+
+    while(true) {
+        // Toggle the LED state
+        //led_state = !led_state;
+        //gpio_put(LED1_PIN, led_state);
+        // wait
+        //vTaskDelay(500);
+        vTaskDelay(500);
     }
 }
 
