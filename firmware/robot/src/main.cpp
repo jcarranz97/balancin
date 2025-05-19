@@ -497,6 +497,13 @@ void serial_scan(__unused void *params) {
     }
 }
 
+
+// Returns the delay in microseconds between each step
+unsigned long get_step_delay_us(double target_rpm, int steps_per_rev) {
+    if (target_rpm <= 0) return 0; // Avoid invalid input
+    return (unsigned long)(60000000.0 / (target_rpm * steps_per_rev));
+}
+
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
@@ -534,7 +541,14 @@ void main_task(__unused void *params) {
     // Set the direction of the stepper motor to clockwise
     gpio_put(LEFT_MOTOR_DIR_PIN, 1);
 
-    int number_of_steps = 200; // Number of steps to take
+    // NUMBER_OF_STEPS * DIVIDER_FOR_FULL_ROTATION
+    //    MS1   MS2   MS3     Microstep Resolution
+    //    0     0     0       Full Step
+    //    1     0     0       Half Step
+    //    0     1     0       Quarter Step
+    //    1     1     0       Eighth Step
+    //    1     1     1       Sixteenth Step
+    int number_of_steps = 200 * 16; // Number of steps to take
     while(true) {
         // printf("Hello from main task count=%u\n", count++);
         // vTaskDelay(1000);
@@ -542,16 +556,16 @@ void main_task(__unused void *params) {
         // One turn is 200 steps, so 1/200 = 0.005 turns
         gpio_put(LEFT_MOTOR_DIR_PIN, 1);
         gpio_put(RIGHT_MOTOR_DIR_PIN, 1);
-        for (int i = 0; i < (number_of_steps * 3) ; i++) {
+        for (int i = 0; i < number_of_steps; i++) {
             // Set the step pin high, then low
             // This will cause the motor to take one step
             // printf("Step %d\n", i);
             gpio_put(LEFT_MOTOR_STEP_PIN, 1);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            vTaskDelay(1);  // Delay for 1 ms
+            sleep_us(get_step_delay_us(50, number_of_steps));
             gpio_put(LEFT_MOTOR_STEP_PIN, 0);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            vTaskDelay(1);  // Delay for 1 ms
+            sleep_us(get_step_delay_us(50, number_of_steps));
         }
         // Wait for 1 second
         vTaskDelay(1000);
@@ -565,10 +579,10 @@ void main_task(__unused void *params) {
             // printf("Step %d\n", i);
             gpio_put(LEFT_MOTOR_STEP_PIN, 1);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            vTaskDelay(1);  // Delay for 1 ms
+            sleep_us(get_step_delay_us(400, number_of_steps));
             gpio_put(LEFT_MOTOR_STEP_PIN, 0);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            vTaskDelay(1);  // Delay for 1 ms
+            sleep_us(get_step_delay_us(400, number_of_steps));
         }
         // Wait for 1 second
         vTaskDelay(1000);
