@@ -549,6 +549,7 @@ void main_task(__unused void *params) {
     //    1     1     0       Eighth Step
     //    1     1     1       Sixteenth Step
     int number_of_steps = 200 * 16; // Number of steps to take
+    int speed_rpm = 60; // Speed in RPM
     while(true) {
         // printf("Hello from main task count=%u\n", count++);
         // vTaskDelay(1000);
@@ -562,10 +563,10 @@ void main_task(__unused void *params) {
             // printf("Step %d\n", i);
             gpio_put(LEFT_MOTOR_STEP_PIN, 1);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            sleep_us(get_step_delay_us(50, number_of_steps));
+            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
             gpio_put(LEFT_MOTOR_STEP_PIN, 0);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            sleep_us(get_step_delay_us(50, number_of_steps));
+            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
         }
         // Wait for 1 second
         vTaskDelay(1000);
@@ -579,10 +580,10 @@ void main_task(__unused void *params) {
             // printf("Step %d\n", i);
             gpio_put(LEFT_MOTOR_STEP_PIN, 1);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
-            sleep_us(get_step_delay_us(400, number_of_steps));
+            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
             gpio_put(LEFT_MOTOR_STEP_PIN, 0);
             gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
-            sleep_us(get_step_delay_us(400, number_of_steps));
+            sleep_us(get_step_delay_us(speed_rpm, number_of_steps));
         }
         // Wait for 1 second
         vTaskDelay(1000);
