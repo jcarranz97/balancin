@@ -51,6 +51,12 @@ dualMotorController motors(LEFT_MOTOR_PIN_A, LEFT_MOTOR_PIN_B, LEFT_MOTOR_PWM_PI
                            RIGHT_MOTOR_PIN_A, RIGHT_MOTOR_PIN_B, RIGHT_MOTOR_PWM_PIN);
 
 
+// Stepper motor pins
+#define LEFT_MOTOR_STEP_PIN   14
+#define LEFT_MOTOR_DIR_PIN    15
+#define RIGHT_MOTOR_STEP_PIN  12
+#define RIGHT_MOTOR_DIR_PIN   13
+
 #define MAX_SAMPLES 1000  // How many samples to store (adjust if needed)
 
 typedef struct {
@@ -494,9 +500,9 @@ void serial_scan(__unused void *params) {
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    //xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     // Initialize the LED pin
     gpio_init(LED1_PIN);
     gpio_set_dir(LED1_PIN, GPIO_OUT);
@@ -507,17 +513,65 @@ void main_task(__unused void *params) {
     gpio_pull_up(BUTTON_A);
     gpio_set_dir(BUTTON_A, GPIO_IN);
     // Create queue for button events
-    button_event_queue = xQueueCreate(10, sizeof(uint32_t));
+    // button_event_queue = xQueueCreate(10, sizeof(uint32_t));
 
     // Register the IRQ
-    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
+    //gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
 
     // Create the button handling task
-    xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
+    //xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
 
+    // Set Stepper motor pins
+    gpio_init(LEFT_MOTOR_STEP_PIN);
+    gpio_set_dir(LEFT_MOTOR_STEP_PIN, GPIO_OUT);
+    gpio_init(LEFT_MOTOR_DIR_PIN);
+    gpio_set_dir(LEFT_MOTOR_DIR_PIN, GPIO_OUT);
+    gpio_init(RIGHT_MOTOR_STEP_PIN);
+    gpio_set_dir(RIGHT_MOTOR_STEP_PIN, GPIO_OUT);
+    gpio_init(RIGHT_MOTOR_DIR_PIN);
+    gpio_set_dir(RIGHT_MOTOR_DIR_PIN, GPIO_OUT);
+
+    // Set the direction of the stepper motor to clockwise
+    gpio_put(LEFT_MOTOR_DIR_PIN, 1);
+
+    int number_of_steps = 200; // Number of steps to take
     while(true) {
         // printf("Hello from main task count=%u\n", count++);
         // vTaskDelay(1000);
+        // Move the stepper motor one step
+        // One turn is 200 steps, so 1/200 = 0.005 turns
+        gpio_put(LEFT_MOTOR_DIR_PIN, 1);
+        gpio_put(RIGHT_MOTOR_DIR_PIN, 1);
+        for (int i = 0; i < (number_of_steps * 3) ; i++) {
+            // Set the step pin high, then low
+            // This will cause the motor to take one step
+            // printf("Step %d\n", i);
+            gpio_put(LEFT_MOTOR_STEP_PIN, 1);
+            gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
+            vTaskDelay(1);  // Delay for 1 ms
+            gpio_put(LEFT_MOTOR_STEP_PIN, 0);
+            gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
+            vTaskDelay(1);  // Delay for 1 ms
+        }
+        // Wait for 1 second
+        vTaskDelay(1000);
+        // Move the stepper motor one step in the opposite direction
+        // Set the direction of the stepper motor to counter-clockwise
+        gpio_put(LEFT_MOTOR_DIR_PIN, 0);
+        gpio_put(RIGHT_MOTOR_DIR_PIN, 0);
+        for (int i = 0; i < number_of_steps; i++) {
+            // Set the step pin high, then low
+            // This will cause the motor to take one step
+            // printf("Step %d\n", i);
+            gpio_put(LEFT_MOTOR_STEP_PIN, 1);
+            gpio_put(RIGHT_MOTOR_STEP_PIN, 1);
+            vTaskDelay(1);  // Delay for 1 ms
+            gpio_put(LEFT_MOTOR_STEP_PIN, 0);
+            gpio_put(RIGHT_MOTOR_STEP_PIN, 0);
+            vTaskDelay(1);  // Delay for 1 ms
+        }
+        // Wait for 1 second
+        vTaskDelay(1000);
     }
 }
 
