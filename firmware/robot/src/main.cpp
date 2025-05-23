@@ -102,10 +102,10 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Kp = 7;          // (P)roportional Tuning Parameter
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
-float target = 2.0;
-float Kp = 395.00;          // (P)roportional Tuning Parameter
-float Ki = 0.00;          // (I)ntegral Tuning Parameter
-float Kd = 8.00;          // (D)erivative Tuning Parameter
+float target = 3.0;
+float Kp = 196.00;          // (P)roportional Tuning Parameter
+float Ki = 117.45;          // (I)ntegral Tuning Parameter
+float Kd = 55.00;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxPTerm = 1000; // The maximum value that can be output
 float maxITerm = 1000; // The maximum value that can be output
@@ -179,6 +179,9 @@ void button_task(void *pvParameters) {
                     lastTime = 0;
                     oldValue = 0;
                     printf("PID stopped\n");
+                    // Disable the motors
+                    gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
+                    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
                 }
                 // If controller is not running, start it
                 else {
@@ -188,6 +191,9 @@ void button_task(void *pvParameters) {
                     // in the Integral term
                     lastTime = millis();
                     clear_pid_logs();
+                    // Enable the motors
+                    gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
+                    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
                 }
                 // Toggle the running state
                 running = !running;
@@ -543,16 +549,20 @@ void stepper_motor_task(__unused void *params) {
     int number_of_steps = 200 * 16; // Number of steps to take
     bool pin_state = false; // Pin state
 
+    // Disable the motors initially
+    gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
+    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
     while (true) {
         // If speed is beetween -10 and 10, stop the motor
-        if (abs16(speed_rpm) < 10) {
-            gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
-            gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
-        } else {
-            // Enable the motor
-            gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
-            gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
-        }
+        // if (abs16(speed_rpm) < 5) {
+        // if (speed_rpm == 0) {
+        //     gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
+        //     gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
+        // } else {
+        //     // Enable the motor
+        //     gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
+        //     gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
+        // }
         // Set the direction of the motor according to the speed_rpm
         if (speed_rpm < 0) {
             gpio_put(LEFT_MOTOR_DIR_PIN, 1);
