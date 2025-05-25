@@ -16,7 +16,7 @@
 #include "hardware/uart.h"
 // #include "MPU6050.h"
 #include "MPU6050_6Axis_MotionApps_V6_12.h"
-#include "motors.h"
+#include "steppers.h"
 
 // Priorities of our threads - higher numbers are higher priority
 #define MAIN_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2UL )
@@ -41,24 +41,7 @@
 #define UART_RX_PIN 1
 
 MPU6050 mpu;
-#define LEFT_MOTOR_PWM_PIN  12
-#define LEFT_MOTOR_PIN_A    14
-#define LEFT_MOTOR_PIN_B    15
-#define RIGHT_MOTOR_PWM_PIN 18
-#define RIGHT_MOTOR_PIN_A   22
-#define RIGHT_MOTOR_PIN_B   26
-dualMotorController motors(LEFT_MOTOR_PIN_A, LEFT_MOTOR_PIN_B, LEFT_MOTOR_PWM_PIN,
-                           RIGHT_MOTOR_PIN_A, RIGHT_MOTOR_PIN_B, RIGHT_MOTOR_PWM_PIN);
 
-
-// Stepper motor pins
-#define LEFT_MOTOR_STEP_PIN   14
-#define LEFT_MOTOR_DIR_PIN    15
-#define LEFT_MOTOR_ENABLE_PIN  10
-#define RIGHT_MOTOR_STEP_PIN  12
-#define RIGHT_MOTOR_DIR_PIN   13
-#define RIGHT_MOTOR_ENABLE_PIN 11
-int16_t speed_rpm = 0;
 
 #define MAX_SAMPLES 1000  // How many samples to store (adjust if needed)
 
@@ -103,12 +86,12 @@ volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin h
 // float Ki = 6;          // (I)ntegral Tuning Parameter
 // float Kd = 3;          // (D)erivative Tuning Parameter
 float target = 3.0;
-float Kp = 196.00;          // (P)roportional Tuning Parameter
-float Ki = 117.45;          // (I)ntegral Tuning Parameter
-float Kd = 55.00;          // (D)erivative Tuning Parameter
+float Kp = 300.00;          // (P)roportional Tuning Parameter
+float Ki = 51.30;          // (I)ntegral Tuning Parameter
+float Kd = 212.00;          // (D)erivative Tuning Parameter
 float iTerm = 0;       // Used to accumulate error (integral)
 float maxPTerm = 1000; // The maximum value that can be output
-float maxITerm = 1000; // The maximum value that can be output
+float maxITerm = 100; // The maximum value that can be output
 float maxDTerm = 1000; // The maximum value that can be output
 float lastTime = 0;    // Records the time the function was last called
 float maxPID = 1000;    // The maximum value that can be output
@@ -117,11 +100,6 @@ bool running = false; // Whether the PID controller is running or not
 
 uint32_t millis() {
     return xTaskGetTickCount() * portTICK_PERIOD_MS;
-}
-
-
-int16_t abs16(int16_t x) {
-    return x < 0 ? -x : x;
 }
 
 
@@ -180,8 +158,7 @@ void button_task(void *pvParameters) {
                     oldValue = 0;
                     printf("PID stopped\n");
                     // Disable the motors
-                    gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
-                    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
+                    disable_steppers();
                 }
                 // If controller is not running, start it
                 else {
@@ -192,8 +169,7 @@ void button_task(void *pvParameters) {
                     lastTime = millis();
                     clear_pid_logs();
                     // Enable the motors
-                    gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
-                    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
+                    enable_steppers();
                 }
                 // Toggle the running state
                 running = !running;
@@ -379,37 +355,14 @@ void robot_task(__unused void *params) {
                 else if (speed < -max_rpm_speed) speed = -max_rpm_speed;
 
                 // Update motor speed
-                speed_rpm = speed;
+                steppers_set_speed(speed);
             }
         } else {
-            speed_rpm = 0;  // Stop motors if not running
+            steppers_set_speed(0); // Stop motors if not running
         }
         vTaskDelay(pdMS_TO_TICKS(2));  // Short delay to settle
     }
 }
-
-void motor_task(__unused void *params) {
-    printf("Motor Task is starting!!!\n");
-    vTaskDelay(1000);
-    motors.init();
-    printf("Motors initialized\n");
-    vTaskDelay(2000);
-    while (true) {
-        // Move motor right motor speed from -1.0 to 1.0
-        for (int16_t speed = -1000; speed <= 1000; speed += 10) {
-            printf("Motor speed: %d\n", speed);
-            motors.setSpeed(speed, speed);
-            vTaskDelay(50);
-        }
-        // Move motor right motor speed from 1.0 to -1.0
-        for (int16_t speed = 1000; speed >= -1000; speed -= 10) {
-            printf("Motor speed: %d\n", speed);
-            motors.setSpeed(speed, speed);
-            vTaskDelay(50);
-        }
-    }
-}
-
 
 void process_line(const char *line) {
     // Check for "show" command
@@ -517,69 +470,6 @@ void serial_scan(__unused void *params) {
 }
 
 
-// Returns the delay in microseconds between each step
-unsigned long get_step_delay_us(double target_rpm, int steps_per_rev) {
-    if (target_rpm <= 0) return 0; // Avoid invalid input
-    return (unsigned long)(60000000.0 / (target_rpm * steps_per_rev));
-}
-
-void stepper_motor_task(__unused void *params) {
-    // Set Stepper motor pins
-    gpio_init(LEFT_MOTOR_STEP_PIN);
-    gpio_set_dir(LEFT_MOTOR_STEP_PIN, GPIO_OUT);
-    gpio_init(LEFT_MOTOR_DIR_PIN);
-    gpio_set_dir(LEFT_MOTOR_DIR_PIN, GPIO_OUT);
-    gpio_init(RIGHT_MOTOR_STEP_PIN);
-    gpio_set_dir(RIGHT_MOTOR_STEP_PIN, GPIO_OUT);
-    gpio_init(RIGHT_MOTOR_DIR_PIN);
-    gpio_set_dir(RIGHT_MOTOR_DIR_PIN, GPIO_OUT);
-    // Configure the enable pins as outputs
-    gpio_init(LEFT_MOTOR_ENABLE_PIN);
-    gpio_set_dir(LEFT_MOTOR_ENABLE_PIN, GPIO_OUT);
-    gpio_init(RIGHT_MOTOR_ENABLE_PIN);
-    gpio_set_dir(RIGHT_MOTOR_ENABLE_PIN, GPIO_OUT);
-
-    // NUMBER_OF_STEPS * DIVIDER_FOR_FULL_ROTATION
-    //    MS1   MS2   MS3     Microstep Resolution
-    //    0     0     0       Full Step
-    //    1     0     0       Half Step
-    //    0     1     0       Quarter Step
-    //    1     1     0       Eighth Step
-    //    1     1     1       Sixteenth Step
-    int number_of_steps = 200 * 16; // Number of steps to take
-    bool pin_state = false; // Pin state
-
-    // Disable the motors initially
-    gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
-    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
-    while (true) {
-        // If speed is beetween -10 and 10, stop the motor
-        // if (abs16(speed_rpm) < 5) {
-        // if (speed_rpm == 0) {
-        //     gpio_put(LEFT_MOTOR_ENABLE_PIN, 1);
-        //     gpio_put(RIGHT_MOTOR_ENABLE_PIN, 1);
-        // } else {
-        //     // Enable the motor
-        //     gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);
-        //     gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);
-        // }
-        // Set the direction of the motor according to the speed_rpm
-        if (speed_rpm < 0) {
-            gpio_put(LEFT_MOTOR_DIR_PIN, 1);
-            gpio_put(RIGHT_MOTOR_DIR_PIN, 1);
-        } else {
-            gpio_put(LEFT_MOTOR_DIR_PIN, 0);
-            gpio_put(RIGHT_MOTOR_DIR_PIN, 0);
-        }
-        // Move the stepper motor one step
-        gpio_put(LEFT_MOTOR_STEP_PIN, pin_state);
-        gpio_put(RIGHT_MOTOR_STEP_PIN, pin_state);
-        sleep_us(get_step_delay_us(abs16(speed_rpm), number_of_steps));
-        pin_state = !pin_state;
-    }
-}
-
-
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
@@ -587,7 +477,7 @@ void main_task(__unused void *params) {
     //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     // Initialize the LED pin
-    xTaskCreate(stepper_motor_task, "StepperMotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    xTaskCreate(stepper_motor_task, "StepperMotorTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
     gpio_init(LED1_PIN);
     gpio_set_dir(LED1_PIN, GPIO_OUT);
     // int count = 0;

@@ -19,6 +19,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     hardware_i2c
     MPU6050
     motors
+    steppers
     )
 # Enable Serial over USB
 pico_enable_stdio_usb(${TARGET_NAME} 0)
