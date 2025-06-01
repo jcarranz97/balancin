@@ -14,6 +14,7 @@
 #include "task.h"
 #include "hardware/i2c.h"
 #include "hardware/uart.h"
+#include "hardware/pwm.h"
 // #include "MPU6050.h"
 #include "MPU6050_6Axis_MotionApps_V6_12.h"
 #include "steppers.h"
@@ -470,16 +471,91 @@ void serial_scan(__unused void *params) {
 }
 
 
+uint freq_to_wrap(uint frequency, float clk_div) {
+    uint sys_clk = 125000000; // 125 MHz default for RP2040
+    uint wrap = (uint)((sys_clk / clk_div) / frequency) - 1;
+    // Ensure wrap is within valid range, if not, print an error
+    // and stop the program
+    if (wrap > 65535) {
+        printf("Error: Frequency too low, wrap exceeds 16-bit limit.\n");
+        wrap = 65535; // Cap at maximum wrap value
+    }
+    // printf("Wrap value for frequency %d Hz: %d\n", frequency, wrap);
+    return wrap;
+}
+
+void set_pwm_step_frequency(uint slice, uint channel, uint frequency) {
+    uint wrap = freq_to_wrap(frequency, PWM_DIVIDER);
+    pwm_set_wrap(slice, wrap);
+    pwm_set_chan_level(slice, channel, wrap / 2);  // 50% duty cycle
+    pwm_set_enabled(slice, true);
+}
+
+
+void set_motor_speed(float rpm, uint slice, uint channel) {
+    // Convert RPM to frequency
+    uint steps_per_rev = STEPS_PER_REV * MICROSTEPPING;
+    float revs_per_sec = rpm / 60.0f;
+    uint step_freq = (uint)(steps_per_rev * revs_per_sec);  // Steps per second
+
+    // Set the PWM frequency for the left motor step pin
+    set_pwm_step_frequency(slice, channel, step_freq);
+}
+
+
+void stepper_task(__unused void *params) {
+    // Configure the DIR and enable pins as outputs and set initial states
+    gpio_init(LEFT_MOTOR_DIR_PIN);
+    gpio_set_dir(LEFT_MOTOR_DIR_PIN, GPIO_OUT);
+    gpio_init(LEFT_MOTOR_ENABLE_PIN);
+    gpio_set_dir(LEFT_MOTOR_ENABLE_PIN, GPIO_OUT);
+    gpio_put(LEFT_MOTOR_ENABLE_PIN, 0);  // Enable the motor
+    gpio_put(LEFT_MOTOR_DIR_PIN, 0);     // Set direction
+
+    // Configure Right motor pins similarly and disable motor
+    gpio_init(RIGHT_MOTOR_DIR_PIN);
+    gpio_set_dir(RIGHT_MOTOR_DIR_PIN, GPIO_OUT);
+    gpio_init(RIGHT_MOTOR_ENABLE_PIN);
+    gpio_set_dir(RIGHT_MOTOR_ENABLE_PIN, GPIO_OUT);
+    gpio_put(RIGHT_MOTOR_ENABLE_PIN, 0);  // Enable the motor
+    gpio_put(RIGHT_MOTOR_DIR_PIN, 0);     // Set direction
+
+    // Initialize the stepper motor pins
+    gpio_set_function(LEFT_MOTOR_STEP_PIN, GPIO_FUNC_PWM);
+    gpio_set_function(RIGHT_MOTOR_STEP_PIN, GPIO_FUNC_PWM);
+
+    // Get Slice and Channel for the left motor step pin
+    uint left_motor_slice = pwm_gpio_to_slice_num(LEFT_MOTOR_STEP_PIN);
+    uint left_motor_channel = pwm_gpio_to_channel(LEFT_MOTOR_STEP_PIN);
+    uint right_motor_slice = pwm_gpio_to_slice_num(RIGHT_MOTOR_STEP_PIN);
+    uint right_motor_channel = pwm_gpio_to_channel(RIGHT_MOTOR_STEP_PIN);
+
+    // Divide the clock for the PWM slice, so that we can use a slower PWM
+    // frequency for the stepper motor
+    pwm_set_clkdiv(left_motor_slice, PWM_DIVIDER);  // Set slower PWM clock
+    pwm_set_clkdiv(right_motor_slice, PWM_DIVIDER);  // Set slower PWM clock
+
+    while (true) {
+        set_motor_speed(5.0, left_motor_slice, left_motor_channel);  // Set left motor speed to 5.0 RPM
+        set_motor_speed(10.0, right_motor_slice, right_motor_channel);  // Set right motor speed to 5.0 RPM
+        vTaskDelay(pdMS_TO_TICKS(1000));  // idle or monitor here
+        set_motor_speed(100.0, left_motor_slice, left_motor_channel);  // Set left motor speed to 100.0 RPM
+        set_motor_speed(200.0, right_motor_slice, right_motor_channel);  // Set right motor speed to 100.0 RPM
+        vTaskDelay(pdMS_TO_TICKS(1000));  // idle or monitor here
+    }
+}
+
 void main_task(__unused void *params) {
     // start the led blinking
     // xTaskCreate(blink_task, "BlinkThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-     xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // xTaskCreate(robot_task, "JuanThread", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     //xTaskCreate(motor_task, "MotorTask", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
-    xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // xTaskCreate(serial_scan, "SerialScan", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
     // Initialize the LED pin
-    xTaskCreate(stepper_motor_task, "StepperMotorTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
-    gpio_init(LED1_PIN);
-    gpio_set_dir(LED1_PIN, GPIO_OUT);
+    // xTaskCreate(stepper_motor_task, "StepperMotorTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xTaskCreate(stepper_task, "stepper_task", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, NULL);
+    // gpio_init(LED1_PIN);
+    // gpio_set_dir(LED1_PIN, GPIO_OUT);
     // int count = 0;
     // Initialize Button
     gpio_init(BUTTON_A);
@@ -487,13 +563,13 @@ void main_task(__unused void *params) {
     gpio_pull_up(BUTTON_A);
     gpio_set_dir(BUTTON_A, GPIO_IN);
     // Create queue for button events
-    button_event_queue = xQueueCreate(10, sizeof(uint32_t));
+    // button_event_queue = xQueueCreate(10, sizeof(uint32_t));
 
     // Register the IRQ
-    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
+    // gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
 
     // Create the button handling task
-    xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
+    // xTaskCreate(button_task, "Button Task", 1024, NULL, 2, NULL);
 
     while(true) {
         // Toggle the LED state
@@ -501,7 +577,7 @@ void main_task(__unused void *params) {
         //gpio_put(LED1_PIN, led_state);
         // wait
         //vTaskDelay(500);
-        vTaskDelay(500);
+        vTaskDelay(20); // Delay for 20 ms
     }
 }
 

@@ -16,6 +16,10 @@
 #define RIGHT_MOTOR_DIR_PIN   13
 #define RIGHT_MOTOR_ENABLE_PIN 11
 
+#define MICROSTEPPING 16
+#define STEPS_PER_REV 200
+#define PWM_DIVIDER 8.0f  // PWM divider for 125 MHz clock
+
 unsigned long get_step_delay_us(double target_rpm, int steps_per_rev);
 void steppers_set_speed(int16_t rpm);
 void stepper_motor_task(__unused void *params);
